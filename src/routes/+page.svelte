@@ -206,7 +206,7 @@
 		<div class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-center">
 			<p class="text-sm text-amber-800">
 				⏰ Het investeringsvenster is gesloten.
-				<span class="mt-1 block font-medium">Uitbetaling volgt met Kerst! 🎄</span>
+				<span class="mt-1 block font-medium">Uitbetaling volgt met Oud en Nieuw! 🎉</span>
 			</p>
 		</div>
 	</div>
