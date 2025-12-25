@@ -765,7 +765,7 @@
 			</div>
 
 			<!-- Chart -->
-			<PriceChart showFuture={true} />
+			<PriceChart showFuture={true} title="📈 Prijsgrafiek" />
 
 			<!-- Price history -->
 			<div class="rounded-xl bg-white p-6 shadow-sm">

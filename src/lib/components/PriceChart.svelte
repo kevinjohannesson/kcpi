@@ -18,7 +18,7 @@
 		price: number;
 	};
 
-	let { showFuture = false } = $props<{ showFuture?: boolean }>();
+	let { showFuture = false, title } = $props<{ showFuture?: boolean; title?: string }>();
 
 	// Normal periods (always shown)
 	const normalPeriods: Period[] = ['LIVE', '1D', '1W', '1M', 'ALL'];
@@ -241,6 +241,9 @@
 
 <!-- Chart Section -->
 <div class="mb-4 rounded-2xl bg-white p-4 shadow-sm md:p-6">
+	{#if title}
+		<h2 class="mb-4 font-semibold text-gray-900">{title}</h2>
+	{/if}
 	<!-- Stats Display: Start value, percentage change, end value -->
 	<div class="mb-2 flex justify-between text-sm">
 		{#if priceQuery.isLoading}
