@@ -143,8 +143,8 @@
 	let randomMaxMinutes = $state(30);
 	let randomMinPriceChange = $state(-0.5);
 	let randomMaxPriceChange = $state(1);
-	let randomMinPrice = $state(16);
-	let randomMaxPrice = $state(120);
+	let randomMinPrice = $state(1);
+	let randomMaxPrice = $state(10);
 
 	// Time presets
 	function addMinutes(mins: number) {
