@@ -16,10 +16,12 @@
 
 	// Form state
 	let newPrice = $state('');
+	let priceInputMode: 'coin' | 'wallet' = $state('coin'); // Toggle between coin price and wallet value
 	let dateValue = $state(formatDateForInput(new Date()));
 	let timeValue = $state(formatTimeForInput(new Date()));
 	// Wallet state
 	let walletInput = $state('');
+	let walletInputMode: 'kry' | 'eur' = $state('kry'); // Toggle between KCRY and €
 
 	// Message feedback
 	let message = $state('');
@@ -74,7 +76,20 @@
 	async function handleSubmit(e: Event) {
 		e.preventDefault();
 
-		const price = parseFloat(newPrice);
+		let price: number;
+
+		if (priceInputMode === 'coin') {
+			price = parseFloat(newPrice);
+		} else {
+			// Convert wallet value to coin price
+			const walletValue = parseFloat(newPrice);
+			if (currentBalance <= 0) {
+				showMessage('❌ Geen saldo beschikbaar om te converteren');
+				return;
+			}
+			price = walletValue / currentBalance;
+		}
+
 		if (isNaN(price) || price < 0) {
 			showMessage('❌ Voer een geldig bedrag in');
 			return;
@@ -84,7 +99,11 @@
 
 		try {
 			await addPrice.mutateAsync({ price, priceDate });
-			showMessage(`✅ Prijs € ${price.toFixed(2)} toegevoegd!`);
+			const displayValue =
+				priceInputMode === 'coin'
+					? `€ ${price.toFixed(2)}`
+					: `€ ${parseFloat(newPrice).toFixed(2)} (wallet) → € ${price.toFixed(2)} per coin`;
+			showMessage(`✅ Prijs ${displayValue} toegevoegd!`);
 			// newPrice = '';
 			// addOneDay();
 		} catch (err) {
@@ -142,10 +161,36 @@
 		addMinutes(mins);
 	}
 
+	// Convert price input value between modes
+	function togglePriceInputMode() {
+		const currentValue = parseFloat(newPrice) || 0;
+
+		if (priceInputMode === 'coin') {
+			// Switching from coin price to wallet value
+			const walletValue = currentValue * currentBalance;
+			newPrice = walletValue.toFixed(2);
+			priceInputMode = 'wallet';
+		} else {
+			// Switching from wallet value to coin price
+			if (currentBalance > 0) {
+				const coinPrice = currentValue / currentBalance;
+				newPrice = coinPrice.toFixed(2);
+			} else {
+				newPrice = '';
+			}
+			priceInputMode = 'coin';
+		}
+	}
+
 	// Price presets
 	function adjustPrice(amount: number) {
 		const current = parseFloat(newPrice) || 0;
-		newPrice = Math.max(0, current + amount).toFixed(2);
+		if (priceInputMode === 'coin') {
+			newPrice = Math.max(0, current + amount).toFixed(2);
+		} else {
+			// In wallet mode, adjust the wallet value
+			newPrice = Math.max(0, current + amount).toFixed(2);
+		}
 	}
 
 	function addRandomPriceChange() {
@@ -164,24 +209,90 @@
 	let password = $state('');
 	let showPassword = $state(false);
 
-	// Sync input when wallet data loads
+	// Current balance for calculations
+	const currentBalance = $derived(walletQuery.data?.kcry_balance ?? 0);
+
+	// Get latest price for wallet value calculations
+	const latestPrice = $derived.by(() => {
+		if (!priceQuery.data?.length) return 0;
+		const now = new Date();
+		const prices = priceQuery.data
+			.map((item: any) => ({
+				date: new Date(item.price_date),
+				price: item.price
+			}))
+			.filter((p: { date: Date; price: number }) => p.date <= now)
+			.sort(
+				(a: { date: Date; price: number }, b: { date: Date; price: number }) =>
+					b.date.getTime() - a.date.getTime()
+			);
+		return prices[0]?.price ?? 0;
+	});
+
+	// Sync input when wallet data loads or mode changes
 	$effect(() => {
-		if (walletQuery.data && !walletInput) {
-			walletInput = walletQuery.data.kcry_balance.toString();
+		if (walletQuery.data) {
+			if (walletInputMode === 'kry') {
+				if (!walletInput || walletInput === '0') {
+					walletInput = walletQuery.data.kcry_balance.toString();
+				}
+			} else {
+				// € mode - calculate wallet value
+				const walletValue = currentBalance * latestPrice;
+				if (!walletInput || walletInput === '0') {
+					walletInput = walletValue.toFixed(2);
+				}
+			}
 		}
 	});
 
-	// Current balance for calculations
-	const currentBalance = $derived(walletQuery.data?.kcry_balance ?? 0);
+	// Convert input value between modes
+	function toggleInputMode() {
+		const currentValue = parseFloat(walletInput) || 0;
+
+		if (walletInputMode === 'kry') {
+			// Switching from KCRY to €
+			const walletValue = currentValue * latestPrice;
+			walletInput = walletValue.toFixed(2);
+			walletInputMode = 'eur';
+		} else {
+			// Switching from € to KCRY
+			if (latestPrice > 0) {
+				const kryAmount = currentValue / latestPrice;
+				walletInput = kryAmount.toFixed(8);
+			} else {
+				walletInput = currentBalance.toString();
+			}
+			walletInputMode = 'kry';
+		}
+	}
 
 	// Wallet actions
 	function adjustBalance(amount: number) {
 		const current = parseFloat(walletInput) || 0;
-		walletInput = Math.max(0, current + amount).toFixed(8);
+		if (walletInputMode === 'kry') {
+			walletInput = Math.max(0, current + amount).toFixed(8);
+		} else {
+			// In € mode, adjust the wallet value
+			walletInput = Math.max(0, current + amount).toFixed(2);
+		}
 	}
 
 	async function handleWalletUpdate() {
-		const balance = parseFloat(walletInput);
+		let balance: number;
+
+		if (walletInputMode === 'kry') {
+			balance = parseFloat(walletInput);
+		} else {
+			// Convert € to KCRY
+			const walletValue = parseFloat(walletInput);
+			if (latestPrice <= 0) {
+				showMessage('❌ Geen prijs beschikbaar om te converteren');
+				return;
+			}
+			balance = walletValue / latestPrice;
+		}
+
 		if (isNaN(balance) || balance < 0) {
 			showMessage('❌ Voer een geldig aantal in');
 			return;
@@ -189,7 +300,11 @@
 
 		try {
 			await updateWallet.mutateAsync(balance);
-			showMessage(`✅ Saldo bijgewerkt naar ${balance.toFixed(4)} KCRY`);
+			const displayValue =
+				walletInputMode === 'kry'
+					? `${balance.toFixed(4)} KCRY`
+					: `€ ${(balance * latestPrice).toFixed(2).replace('.', ',')}`;
+			showMessage(`✅ Saldo bijgewerkt naar ${displayValue}`);
 		} catch (err) {
 			showMessage(`❌ Error: ${err instanceof Error ? err.message : 'Unknown error'}`);
 		}
@@ -256,7 +371,36 @@
 				<form onsubmit={handleSubmit} class="space-y-4">
 					<!-- Price input -->
 					<div>
-						<label for="price" class="mb-1 block text-sm font-medium text-gray-700">Prijs</label>
+						<div class="mb-2 flex items-center justify-between">
+							<label for="price" class="block text-sm font-medium text-gray-700">Prijs</label>
+							<!-- Toggle between coin price and wallet value -->
+							<div class="flex items-center gap-2">
+								<button
+									type="button"
+									onclick={() => {
+										if (priceInputMode !== 'coin') togglePriceInputMode();
+									}}
+									class="rounded-md px-3 py-1 text-xs font-medium transition-colors
+										{priceInputMode === 'coin'
+										? 'bg-gray-900 text-white'
+										: 'bg-gray-100 text-gray-600 hover:bg-gray-200'}"
+								>
+									Per coin
+								</button>
+								<button
+									type="button"
+									onclick={() => {
+										if (priceInputMode !== 'wallet') togglePriceInputMode();
+									}}
+									class="rounded-md px-3 py-1 text-xs font-medium transition-colors
+										{priceInputMode === 'wallet'
+										? 'bg-gray-900 text-white'
+										: 'bg-gray-100 text-gray-600 hover:bg-gray-200'}"
+								>
+									Wallet waarde
+								</button>
+							</div>
+						</div>
 						<div class="relative">
 							<span class="absolute top-1/2 left-3 -translate-y-1/2 text-gray-500">€</span>
 							<input
@@ -265,11 +409,16 @@
 								step="0.01"
 								min="0"
 								bind:value={newPrice}
-								placeholder="1.23"
+								placeholder={priceInputMode === 'coin' ? '1.23' : '123.00'}
 								class="w-full rounded-lg border border-gray-300 py-3 pr-4 pl-8 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
 								disabled={addPrice.isPending}
 							/>
 						</div>
+						{#if priceInputMode === 'wallet'}
+							<p class="mt-1 text-xs text-gray-500">
+								Huidige saldo: € {(currentBalance * latestPrice).toFixed(2).replace('.', ',')}
+							</p>
+						{/if}
 					</div>
 
 					<!-- Date/Time inputs -->
@@ -493,22 +642,7 @@
 										{currentBalance.toFixed(4)} <span class="text-lg text-gray-500">KCRY</span>
 									</p>
 								</div>
-								{#if priceQuery.data?.length}
-									{@const latestPrice = (() => {
-										// Get latest price by price_date (excluding future prices for current value)
-										const now = new Date();
-										const prices = priceQuery.data
-											.map((item: any) => ({
-												date: new Date(item.price_date),
-												price: item.price
-											}))
-											.filter((p: { date: Date; price: number }) => p.date <= now) // Filter out future dates
-											.sort(
-												(a: { date: Date; price: number }, b: { date: Date; price: number }) =>
-													b.date.getTime() - a.date.getTime()
-											);
-										return prices[0]?.price ?? 0;
-									})()}
+								{#if latestPrice > 0}
 									<div class="text-right">
 										<p class="text-sm text-gray-500">Waarde</p>
 										<p class="text-2xl font-bold text-green-600">
@@ -521,22 +655,53 @@
 
 						<!-- Balance input -->
 						<div>
-							<label for="wallet" class="mb-1 block text-sm font-medium text-gray-700">
-								Nieuw saldo
-							</label>
+							<div class="mb-2 flex items-center justify-between">
+								<label for="wallet" class="block text-sm font-medium text-gray-700">
+									Nieuw saldo
+								</label>
+								<!-- Toggle between KCRY and € -->
+								<div class="flex items-center gap-2">
+									<button
+										type="button"
+										onclick={() => {
+											if (walletInputMode !== 'kry') toggleInputMode();
+										}}
+										class="rounded-md px-3 py-1 text-xs font-medium transition-colors
+											{walletInputMode === 'kry'
+											? 'bg-gray-900 text-white'
+											: 'bg-gray-100 text-gray-600 hover:bg-gray-200'}"
+									>
+										KCRY
+									</button>
+									<button
+										type="button"
+										onclick={() => {
+											if (walletInputMode !== 'eur') toggleInputMode();
+										}}
+										class="rounded-md px-3 py-1 text-xs font-medium transition-colors
+											{walletInputMode === 'eur'
+											? 'bg-gray-900 text-white'
+											: 'bg-gray-100 text-gray-600 hover:bg-gray-200'}"
+									>
+										€
+									</button>
+								</div>
+							</div>
 							<div class="flex gap-2">
 								<div class="relative flex-1">
 									<input
 										id="wallet"
 										type="number"
-										step="0.0001"
+										step={walletInputMode === 'kry' ? '0.0001' : '0.01'}
 										min="0"
 										bind:value={walletInput}
-										placeholder="28.3783"
+										placeholder={walletInputMode === 'kry' ? '28.3783' : '2950.00'}
 										class="w-full rounded-lg border border-gray-300 px-4 py-3 pr-16 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
 										disabled={updateWallet.isPending}
 									/>
-									<span class="absolute top-1/2 right-3 -translate-y-1/2 text-gray-400">KCRY</span>
+									<span class="absolute top-1/2 right-3 -translate-y-1/2 text-gray-400">
+										{walletInputMode === 'kry' ? 'KCRY' : '€'}
+									</span>
 								</div>
 								<button
 									type="button"
