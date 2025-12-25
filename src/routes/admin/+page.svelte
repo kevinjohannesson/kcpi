@@ -118,6 +118,46 @@
 	function isFuture(dateStr: string): boolean {
 		return new Date(dateStr) > new Date();
 	}
+
+	// Random range settings
+	let randomMinMinutes = $state(5);
+	let randomMaxMinutes = $state(30);
+	let randomMinPriceChange = $state(-2);
+	let randomMaxPriceChange = $state(5);
+	let randomMinPrice = $state(16);
+	let randomMaxPrice = $state(120);
+
+	// Time presets
+	function addMinutes(mins: number) {
+		const current = getSelectedDateTime();
+		current.setMinutes(current.getMinutes() + mins);
+		dateValue = formatDateForInput(current);
+		timeValue = formatTimeForInput(current);
+	}
+
+	function addRandomTime() {
+		const mins = Math.floor(
+			Math.random() * (randomMaxMinutes - randomMinMinutes + 1) + randomMinMinutes
+		);
+		addMinutes(mins);
+	}
+
+	// Price presets
+	function adjustPrice(amount: number) {
+		const current = parseFloat(newPrice) || 0;
+		newPrice = Math.max(0, current + amount).toFixed(2);
+	}
+
+	function addRandomPriceChange() {
+		const change =
+			Math.random() * (randomMaxPriceChange - randomMinPriceChange) + randomMinPriceChange;
+		adjustPrice(change);
+	}
+
+	function setRandomPrice() {
+		const price = Math.random() * (randomMaxPrice - randomMinPrice) + randomMinPrice;
+		newPrice = price.toFixed(2);
+	}
 </script>
 
 <div class="min-h-screen bg-gray-100">
@@ -177,7 +217,7 @@
 				</div>
 
 				<!-- Quick presets -->
-				<div class="flex flex-wrap gap-2">
+				<!-- <div class="flex flex-wrap gap-2">
 					<button
 						type="button"
 						onclick={setToNow}
@@ -199,6 +239,165 @@
 					>
 						+1 dag
 					</button>
+				</div> -->
+
+				<!-- Quick presets -->
+				<div class="space-y-4">
+					<!-- Time presets -->
+					<div>
+						<label class="mb-1.5 block text-sm font-medium text-gray-700">Tijd aanpassen</label>
+						<div class="flex flex-wrap items-center gap-2">
+							<button
+								type="button"
+								onclick={setToNow}
+								class="rounded-md bg-gray-100 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-200"
+							>
+								Nu
+							</button>
+							<button
+								type="button"
+								onclick={() => addMinutes(5)}
+								class="rounded-md bg-gray-100 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-200"
+							>
+								+5 min
+							</button>
+							<button
+								type="button"
+								onclick={() => addMinutes(15)}
+								class="rounded-md bg-gray-100 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-200"
+							>
+								+15 min
+							</button>
+							<button
+								type="button"
+								onclick={() => addMinutes(60)}
+								class="rounded-md bg-gray-100 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-200"
+							>
+								+1 uur
+							</button>
+							<button
+								type="button"
+								onclick={addRandomTime}
+								class="rounded-md bg-purple-100 px-3 py-1.5 text-sm text-purple-700 hover:bg-purple-200"
+							>
+								+🎲
+							</button>
+							<div class="flex items-center gap-1 text-xs text-gray-500">
+								<input
+									type="number"
+									bind:value={randomMinMinutes}
+									class="w-12 rounded border border-gray-300 px-1.5 py-1 text-center text-xs"
+									min="1"
+								/>
+								<span>-</span>
+								<input
+									type="number"
+									bind:value={randomMaxMinutes}
+									class="w-12 rounded border border-gray-300 px-1.5 py-1 text-center text-xs"
+									min="1"
+								/>
+								<span>min</span>
+							</div>
+						</div>
+					</div>
+
+					<!-- Price adjustment presets -->
+					<div>
+						<label class="mb-1.5 block text-sm font-medium text-gray-700">Prijs aanpassen</label>
+						<div class="flex flex-wrap items-center gap-2">
+							<button
+								type="button"
+								onclick={() => adjustPrice(-1)}
+								class="rounded-md bg-red-50 px-3 py-1.5 text-sm text-red-700 hover:bg-red-100"
+							>
+								-€1
+							</button>
+							<button
+								type="button"
+								onclick={() => adjustPrice(-0.5)}
+								class="rounded-md bg-red-50 px-3 py-1.5 text-sm text-red-700 hover:bg-red-100"
+							>
+								-€0,50
+							</button>
+							<button
+								type="button"
+								onclick={() => adjustPrice(0.5)}
+								class="rounded-md bg-green-50 px-3 py-1.5 text-sm text-green-700 hover:bg-green-100"
+							>
+								+€0,50
+							</button>
+							<button
+								type="button"
+								onclick={() => adjustPrice(1)}
+								class="rounded-md bg-green-50 px-3 py-1.5 text-sm text-green-700 hover:bg-green-100"
+							>
+								+€1
+							</button>
+							<button
+								type="button"
+								onclick={() => adjustPrice(5)}
+								class="rounded-md bg-green-50 px-3 py-1.5 text-sm text-green-700 hover:bg-green-100"
+							>
+								+€5
+							</button>
+							<button
+								type="button"
+								onclick={addRandomPriceChange}
+								class="rounded-md bg-purple-100 px-3 py-1.5 text-sm text-purple-700 hover:bg-purple-200"
+							>
+								±🎲
+							</button>
+							<div class="flex items-center gap-1 text-xs text-gray-500">
+								<input
+									type="number"
+									bind:value={randomMinPriceChange}
+									step="0.5"
+									class="w-14 rounded border border-gray-300 px-1.5 py-1 text-center text-xs"
+								/>
+								<span>-</span>
+								<input
+									type="number"
+									bind:value={randomMaxPriceChange}
+									step="0.5"
+									class="w-14 rounded border border-gray-300 px-1.5 py-1 text-center text-xs"
+								/>
+								<span>€</span>
+							</div>
+						</div>
+					</div>
+
+					<!-- Random price (absolute) -->
+					<div>
+						<label class="mb-1.5 block text-sm font-medium text-gray-700">Willekeurige prijs</label>
+						<div class="flex flex-wrap items-center gap-2">
+							<button
+								type="button"
+								onclick={setRandomPrice}
+								class="rounded-md bg-purple-100 px-3 py-1.5 text-sm text-purple-700 hover:bg-purple-200"
+							>
+								🎲 Genereer prijs
+							</button>
+							<div class="flex items-center gap-1 text-xs text-gray-500">
+								<span>€</span>
+								<input
+									type="number"
+									bind:value={randomMinPrice}
+									step="1"
+									min="0"
+									class="w-16 rounded border border-gray-300 px-1.5 py-1 text-center text-xs"
+								/>
+								<span>-</span>
+								<span>€</span>
+								<input
+									type="number"
+									bind:value={randomMaxPrice}
+									step="1"
+									min="0"
+									class="w-16 rounded border border-gray-300 px-1.5 py-1 text-center text-xs"
+								/>
+							</div>
+						</div>
+					</div>
 				</div>
 
 				<!-- Submit -->
