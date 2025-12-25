@@ -2,9 +2,55 @@
 	import logo from '$lib/assets/logo.png';
 	import PriceChart from '$lib/components/PriceChart.svelte';
 	import { config } from '$lib/utils/price-data.svelte.js';
-	const { coinName, ticker, currentPrice, startingPrice, holdings } = config;
-	const totalValue = (holdings * currentPrice).toFixed(2);
-	const overallGain = (((currentPrice - startingPrice) / startingPrice) * 100).toFixed(2);
+	import { createPriceQuery } from '$lib/queries/prices';
+	import { createWalletQuery } from '$lib/queries/wallet';
+
+	let { data } = $props();
+
+	const { coinName, ticker } = config;
+	const priceQuery = createPriceQuery();
+	const walletQuery = createWalletQuery();
+
+	// Get wallet balance (fallback to config if not loaded)
+	const walletBalance = $derived(walletQuery.data?.kcry_balance ?? config.holdings);
+
+	// Calculate actual values from price data
+	const priceData = $derived.by(() => {
+		if (!priceQuery.data || priceQuery.data.length === 0) {
+			return {
+				currentPrice: config.currentPrice,
+				startingPrice: config.startingPrice,
+				totalValue: (walletBalance * config.currentPrice).toFixed(2),
+				overallGain: (
+					((config.currentPrice - config.startingPrice) / config.startingPrice) *
+					100
+				).toFixed(2)
+			};
+		}
+
+		// Get prices sorted by date (ascending)
+		const prices = priceQuery.data
+			.map((item: any) => ({
+				date: new Date(item.price_date),
+				price: item.price
+			}))
+			.sort(
+				(a: { date: Date; price: number }, b: { date: Date; price: number }) =>
+					a.date.getTime() - b.date.getTime()
+			);
+
+		const startingPrice = prices[0].price;
+		const currentPrice = prices[prices.length - 1].price;
+		const totalValue = (walletBalance * currentPrice).toFixed(2);
+		const overallGain = (((currentPrice - startingPrice) / startingPrice) * 100).toFixed(2);
+
+		return {
+			currentPrice,
+			startingPrice,
+			totalValue,
+			overallGain
+		};
+	});
 
 	function fmt(n: number) {
 		return n.toFixed(2).replace('.', ',');
@@ -21,18 +67,40 @@
 				<img src={logo} alt="KingCryps Logo" class="mx-auto h-24" />
 			</div>
 			<h1 class="text-2xl font-bold text-gray-900 md:text-3xl">{coinName}</h1>
+			{#if data.authenticated}
+				<a href="/admin" class="mt-2 inline-block text-sm text-blue-600 hover:underline"
+					>⚙️ Admin dashboard</a
+				>
+			{/if}
 
 			<div class="mt-4">
-				<span class="text-4xl font-bold text-gray-900 md:text-5xl">€ {fmt(currentPrice)}</span>
+				{#if priceQuery.isLoading}
+					<span class="text-4xl font-bold text-gray-900 md:text-5xl">Laden...</span>
+				{:else if priceQuery.isError}
+					<span class="text-4xl font-bold text-red-500 md:text-5xl">Fout</span>
+				{:else}
+					<span class="text-4xl font-bold text-gray-900 md:text-5xl"
+						>€ {fmt(priceData.currentPrice)}</span
+					>
+				{/if}
 			</div>
 
 			<div class="mt-3 flex items-center justify-center gap-3">
-				<span
-					class="inline-flex items-center rounded-md bg-green-100 px-3 py-1 text-sm font-semibold text-green-700"
-				>
-					+{overallGain.replace('.', ',')}%
-				</span>
-				<span class="text-sm text-gray-500">vanaf € {fmt(startingPrice)}</span>
+				{#if priceQuery.isLoading}
+					<span class="text-sm text-gray-500">Laden...</span>
+				{:else if priceQuery.isError}
+					<span class="text-sm text-red-500">Fout bij laden</span>
+				{:else}
+					<span
+						class="inline-flex items-center rounded-md bg-green-100 px-3 py-1 text-sm font-semibold text-green-700"
+					>
+						{priceData.overallGain.startsWith('-') ? '' : '+'}{priceData.overallGain.replace(
+							'.',
+							','
+						)}%
+					</span>
+					<span class="text-sm text-gray-500">vanaf € {fmt(priceData.startingPrice)}</span>
+				{/if}
 			</div>
 		</div>
 
@@ -43,15 +111,26 @@
 		<div class="mb-4 rounded-2xl bg-white p-4 shadow-sm md:p-6">
 			<div class="flex items-center justify-between">
 				<div class="flex items-center gap-3">
-					<span class="text-3xl">👑</span>
+					<span class="text-3xl">💰</span>
 					<div>
 						<h3 class="font-semibold text-gray-900">Saldo</h3>
 						<p class="text-sm text-gray-500">Totaal</p>
 					</div>
 				</div>
 				<div class="text-right">
-					<p class="text-xl font-bold text-gray-900">€ {totalValue.replace('.', ',')}</p>
-					<p class="text-sm text-gray-500">{holdings.toFixed(7).replace('.', ',')} {ticker}</p>
+					{#if priceQuery.isLoading || walletQuery.isLoading}
+						<p class="text-xl font-bold text-gray-900">Laden...</p>
+					{:else if priceQuery.isError || walletQuery.isError}
+						<p class="text-xl font-bold text-red-500">Fout</p>
+					{:else}
+						<p class="text-xl font-bold text-gray-900">
+							€ {priceData.totalValue.replace('.', ',')}
+						</p>
+						<p class="text-sm text-gray-500">
+							{walletBalance.toFixed(7).replace('.', ',')}
+							{ticker}
+						</p>
+					{/if}
 				</div>
 			</div>
 		</div>
@@ -61,12 +140,12 @@
 			<button
 				disabled
 				class="cursor-not-allowed rounded-xl bg-blue-200 py-4 font-semibold text-blue-400"
-				>Kopen</button
+				>🛒 Kopen</button
 			>
 			<button
 				disabled
 				class="cursor-not-allowed rounded-xl bg-blue-200 py-4 font-semibold text-blue-400"
-				>Verkopen</button
+				>💸 Verkopen</button
 			>
 		</div>
 

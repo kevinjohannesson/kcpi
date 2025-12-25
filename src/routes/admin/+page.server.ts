@@ -22,7 +22,7 @@ export const actions: Actions = {
 		}
 
 		cookies.set('admin_auth', 'true', {
-			path: '/admin',
+			path: '/',
 			httpOnly: true,
 			sameSite: 'strict',
 			maxAge: 60 * 60 * 24 * 7 // 1 week
@@ -32,7 +32,7 @@ export const actions: Actions = {
 	},
 
 	logout: async ({ cookies }) => {
-		cookies.delete('admin_auth', { path: '/admin' });
+		cookies.delete('admin_auth', { path: '/' });
 		return { success: true };
 	}
 };

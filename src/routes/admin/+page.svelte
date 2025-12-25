@@ -6,15 +6,20 @@
 		createAddPriceMutation,
 		createDeletePriceMutation
 	} from '$lib/queries/prices';
+	import { createWalletQuery, createUpdateWalletMutation } from '$lib/queries/wallet';
 
 	const priceQuery = createPriceQuery();
 	const addPrice = createAddPriceMutation();
 	const deletePrice = createDeletePriceMutation();
+	const walletQuery = createWalletQuery();
+	const updateWallet = createUpdateWalletMutation();
 
 	// Form state
 	let newPrice = $state('');
 	let dateValue = $state(formatDateForInput(new Date()));
 	let timeValue = $state(formatTimeForInput(new Date()));
+	// Wallet state
+	let walletInput = $state('');
 
 	// Message feedback
 	let message = $state('');
@@ -62,13 +67,6 @@
 	function addOneDay() {
 		const current = getSelectedDateTime();
 		current.setDate(current.getDate() + 1);
-		dateValue = formatDateForInput(current);
-		timeValue = formatTimeForInput(current);
-	}
-
-	function addOneHour() {
-		const current = getSelectedDateTime();
-		current.setHours(current.getHours() + 1);
 		dateValue = formatDateForInput(current);
 		timeValue = formatTimeForInput(current);
 	}
@@ -165,6 +163,37 @@
 
 	let password = $state('');
 	let showPassword = $state(false);
+
+	// Sync input when wallet data loads
+	$effect(() => {
+		if (walletQuery.data && !walletInput) {
+			walletInput = walletQuery.data.kcry_balance.toString();
+		}
+	});
+
+	// Current balance for calculations
+	const currentBalance = $derived(walletQuery.data?.kcry_balance ?? 0);
+
+	// Wallet actions
+	function adjustBalance(amount: number) {
+		const current = parseFloat(walletInput) || 0;
+		walletInput = Math.max(0, current + amount).toFixed(8);
+	}
+
+	async function handleWalletUpdate() {
+		const balance = parseFloat(walletInput);
+		if (isNaN(balance) || balance < 0) {
+			showMessage('❌ Voer een geldig aantal in');
+			return;
+		}
+
+		try {
+			await updateWallet.mutateAsync(balance);
+			showMessage(`✅ Saldo bijgewerkt naar ${balance.toFixed(4)} KCRY`);
+		} catch (err) {
+			showMessage(`❌ Error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+		}
+	}
 </script>
 
 {#if !data.authenticated}
@@ -215,14 +244,14 @@
 		<div class="mx-auto max-w-2xl px-4 py-8">
 			<!-- Header -->
 			<div class="mb-8">
-				<h1 class="text-2xl font-bold text-gray-900">👑 KingCryps Admin</h1>
+				<h1 class="text-2xl font-bold text-gray-900">KingCryps Admin</h1>
 				<p class="mt-1 text-gray-600">Beheer de koers van KingCryps</p>
 				<a href="/" class="text-sm text-blue-600 hover:underline">← Terug naar dashboard</a>
 			</div>
 
 			<!-- Add new price -->
 			<div class="mb-6 rounded-xl bg-white p-6 shadow-sm">
-				<h2 class="mb-4 font-semibold text-gray-900">Nieuwe prijs toevoegen</h2>
+				<h2 class="mb-4 font-semibold text-gray-900">💰 Nieuwe prijs toevoegen</h2>
 
 				<form onsubmit={handleSubmit} class="space-y-4">
 					<!-- Price input -->
@@ -445,12 +474,123 @@
 				{/if}
 			</div>
 
+			<!-- Wallet Management Section -->
+			<div class="mb-6 rounded-xl bg-white p-6 shadow-sm">
+				<h2 class="mb-4 font-semibold text-gray-900">💰 Wallet beheren</h2>
+
+				{#if walletQuery.isPending}
+					<p class="text-gray-500">Laden...</p>
+				{:else if walletQuery.isError}
+					<p class="text-red-500">Error: {walletQuery.error?.message}</p>
+				{:else}
+					<div class="space-y-4">
+						<!-- Current balance display -->
+						<div class="rounded-lg bg-gray-50 p-4">
+							<div class="flex items-center justify-between">
+								<div>
+									<p class="text-sm text-gray-500">Huidig saldo</p>
+									<p class="text-2xl font-bold text-gray-900">
+										{currentBalance.toFixed(4)} <span class="text-lg text-gray-500">KCRY</span>
+									</p>
+								</div>
+								{#if priceQuery.data?.length}
+									{@const latestPrice = priceQuery.data[priceQuery.data.length - 1]?.price ?? 0}
+									<div class="text-right">
+										<p class="text-sm text-gray-500">Waarde</p>
+										<p class="text-2xl font-bold text-green-600">
+											€ {(currentBalance * latestPrice).toFixed(2).replace('.', ',')}
+										</p>
+									</div>
+								{/if}
+							</div>
+						</div>
+
+						<!-- Balance input -->
+						<div>
+							<label for="wallet" class="mb-1 block text-sm font-medium text-gray-700">
+								Nieuw saldo
+							</label>
+							<div class="flex gap-2">
+								<div class="relative flex-1">
+									<input
+										id="wallet"
+										type="number"
+										step="0.0001"
+										min="0"
+										bind:value={walletInput}
+										placeholder="28.3783"
+										class="w-full rounded-lg border border-gray-300 px-4 py-3 pr-16 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+										disabled={updateWallet.isPending}
+									/>
+									<span class="absolute top-1/2 right-3 -translate-y-1/2 text-gray-400">KCRY</span>
+								</div>
+								<button
+									type="button"
+									onclick={handleWalletUpdate}
+									disabled={updateWallet.isPending}
+									class="rounded-lg bg-blue-600 px-6 py-3 font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+								>
+									{updateWallet.isPending ? '...' : 'Opslaan'}
+								</button>
+							</div>
+						</div>
+
+						<!-- Quick adjust buttons -->
+						<div>
+							<label class="mb-1.5 block text-sm font-medium text-gray-700">Snel aanpassen</label>
+							<div class="flex flex-wrap gap-2">
+								<button
+									type="button"
+									onclick={() => adjustBalance(-5)}
+									class="rounded-md bg-red-50 px-3 py-1.5 text-sm text-red-700 hover:bg-red-100"
+								>
+									-5
+								</button>
+								<button
+									type="button"
+									onclick={() => adjustBalance(-1)}
+									class="rounded-md bg-red-50 px-3 py-1.5 text-sm text-red-700 hover:bg-red-100"
+								>
+									-1
+								</button>
+								<button
+									type="button"
+									onclick={() => adjustBalance(1)}
+									class="rounded-md bg-green-50 px-3 py-1.5 text-sm text-green-700 hover:bg-green-100"
+								>
+									+1
+								</button>
+								<button
+									type="button"
+									onclick={() => adjustBalance(5)}
+									class="rounded-md bg-green-50 px-3 py-1.5 text-sm text-green-700 hover:bg-green-100"
+								>
+									+5
+								</button>
+								<button
+									type="button"
+									onclick={() => adjustBalance(10)}
+									class="rounded-md bg-green-50 px-3 py-1.5 text-sm text-green-700 hover:bg-green-100"
+								>
+									+10
+								</button>
+							</div>
+						</div>
+
+						<!-- Story hint -->
+						<p class="text-xs text-gray-400">
+							💡 Tip: Verlaag het saldo als je "verkoopt", verhoog als je "koopt"
+						</p>
+					</div>
+				{/if}
+			</div>
+
 			<!-- Chart -->
 			<PriceChart />
 
 			<!-- Price history -->
 			<div class="rounded-xl bg-white p-6 shadow-sm">
-				<h2 class="mb-4 font-semibold text-gray-900">Prijsgeschiedenis</h2>
+				<h2 class="mb-4 font-semibold text-gray-900">📊 Prijsgeschiedenis</h2>
 
 				{#if priceQuery.isPending}
 					<p class="text-gray-500">Laden...</p>
