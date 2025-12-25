@@ -1,9 +1,7 @@
 <script lang="ts">
-	import { config } from '$lib/utils/price-data.svelte.js';
-	import { page } from '$app/state';
-	import { supabase } from '$lib/utils/supabase';
+	import logo from '$lib/assets/logo.png';
 	import PriceChart from '$lib/components/PriceChart.svelte';
-
+	import { config } from '$lib/utils/price-data.svelte.js';
 	const { coinName, ticker, currentPrice, startingPrice, holdings } = config;
 	const totalValue = (holdings * currentPrice).toFixed(2);
 	const overallGain = (((currentPrice - startingPrice) / startingPrice) * 100).toFixed(2);
@@ -11,17 +9,17 @@
 	function fmt(n: number) {
 		return n.toFixed(2).replace('.', ',');
 	}
-
-	console.log(page.url.searchParams.get('admin'));
-	console.log(supabase);
-	const isAdmin = page.url.searchParams.get('admin') === 'true';
 </script>
 
 <div class="min-h-screen bg-gray-50">
 	<div class="mx-auto max-w-md px-4 py-6 md:max-w-4xl md:py-12">
 		<!-- Header -->
 		<div class="mb-6 text-center">
-			<div class="mb-2 text-5xl">👑</div>
+			<div class="mb-2 text-5xl">
+				<!-- 👑 -->
+
+				<img src={logo} alt="KingCryps Logo" class="mx-auto h-24" />
+			</div>
 			<h1 class="text-2xl font-bold text-gray-900 md:text-3xl">{coinName}</h1>
 
 			<div class="mt-4">
