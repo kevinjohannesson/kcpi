@@ -28,16 +28,32 @@
 			};
 		}
 
-		// Get prices sorted by date (ascending)
+		const now = new Date();
+
+		// Get prices sorted by date (ascending), filtering out future dates for regular view
 		const prices = priceQuery.data
 			.map((item: any) => ({
 				date: new Date(item.price_date),
 				price: item.price
 			}))
+			.filter((p: { date: Date; price: number }) => p.date <= now) // Filter out future dates
 			.sort(
 				(a: { date: Date; price: number }, b: { date: Date; price: number }) =>
 					a.date.getTime() - b.date.getTime()
 			);
+
+		if (prices.length === 0) {
+			// If no past prices, fall back to config
+			return {
+				currentPrice: config.currentPrice,
+				startingPrice: config.startingPrice,
+				totalValue: (walletBalance * config.currentPrice).toFixed(2),
+				overallGain: (
+					((config.currentPrice - config.startingPrice) / config.startingPrice) *
+					100
+				).toFixed(2)
+			};
+		}
 
 		const startingPrice = prices[0].price;
 		const currentPrice = prices[prices.length - 1].price;

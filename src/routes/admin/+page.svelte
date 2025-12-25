@@ -494,7 +494,21 @@
 									</p>
 								</div>
 								{#if priceQuery.data?.length}
-									{@const latestPrice = priceQuery.data[priceQuery.data.length - 1]?.price ?? 0}
+									{@const latestPrice = (() => {
+										// Get latest price by price_date (excluding future prices for current value)
+										const now = new Date();
+										const prices = priceQuery.data
+											.map((item: any) => ({
+												date: new Date(item.price_date),
+												price: item.price
+											}))
+											.filter((p: { date: Date; price: number }) => p.date <= now) // Filter out future dates
+											.sort(
+												(a: { date: Date; price: number }, b: { date: Date; price: number }) =>
+													b.date.getTime() - a.date.getTime()
+											);
+										return prices[0]?.price ?? 0;
+									})()}
 									<div class="text-right">
 										<p class="text-sm text-gray-500">Waarde</p>
 										<p class="text-2xl font-bold text-green-600">

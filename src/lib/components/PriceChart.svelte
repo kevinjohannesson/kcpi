@@ -11,7 +11,7 @@
 	// Tree-shaking setup
 	use([BarChart, LineChart, GridComponent, CanvasRenderer, TitleComponent, TooltipComponent]);
 
-	type Period = 'LIVE' | '1D' | '1W' | '1M' | 'ALL';
+	type Period = 'LIVE' | '1D' | '1W' | '1M' | 'ALL' | 'ALL_NOW';
 	type PriceDataPoint = {
 		timestamp: number;
 		date: Date;
@@ -20,11 +20,16 @@
 
 	let { showFuture = false } = $props<{ showFuture?: boolean }>();
 
-	const periods: Period[] = ['LIVE', '1D', '1W', '1M', 'ALL'];
+	// Normal periods (always shown)
+	const normalPeriods: Period[] = ['LIVE', '1D', '1W', '1M', 'ALL'];
+	// Admin-only periods (only shown when showFuture is true)
+	const adminPeriods: Period[] = ['ALL_NOW'];
+
 	const priceQuery = createPriceQuery();
 	let selectedPeriod: Period = $state('ALL');
 
 	// Transform Supabase data to the expected format
+	// This includes all data (future included if showFuture is true)
 	const allPriceData = $derived.by((): PriceDataPoint[] => {
 		if (!priceQuery.data) return [];
 
@@ -42,10 +47,26 @@
 			.filter((d: PriceDataPoint) => showFuture || d.date <= now); // Filter out future dates unless showFuture is true
 	});
 
+	// All data up to now (excluding future) - used for ALL_NOW period
+	const allPriceDataUpToNow = $derived.by((): PriceDataPoint[] => {
+		if (!priceQuery.data) return [];
+
+		const now = new Date();
+
+		return priceQuery.data
+			.map((item: any) => {
+				const date = new Date(item.price_date);
+				return {
+					timestamp: date.getTime(),
+					date: date,
+					price: item.price
+				};
+			})
+			.filter((d: PriceDataPoint) => d.date <= now); // Always exclude future dates
+	});
+
 	// Filtered data based on selected period
 	const filteredPriceData = $derived.by((): PriceDataPoint[] => {
-		if (allPriceData.length === 0) return [];
-
 		const now = new SvelteDate();
 
 		switch (selectedPeriod) {
@@ -71,6 +92,11 @@
 				// Last 30 days
 				const oneMonthAgo = new SvelteDate(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 				return allPriceData.filter((d) => d.date >= oneMonthAgo);
+			}
+
+			case 'ALL_NOW': {
+				// All data up to now (excluding future) - admin only
+				return allPriceDataUpToNow;
 			}
 
 			case 'ALL':
@@ -249,7 +275,7 @@
 
 	<!-- Period buttons -->
 	<div class="mt-4 flex items-center justify-center gap-2">
-		{#each periods as period}
+		{#each normalPeriods as period}
 			<button
 				class="rounded-lg px-4 py-2 text-sm font-medium transition-colors
                    {selectedPeriod === period
@@ -257,11 +283,25 @@
 					: 'text-gray-600 hover:bg-gray-100'}"
 				onclick={() => {
 					selectedPeriod = period;
-					console.log('period', period);
 				}}
 			>
 				{period}
 			</button>
 		{/each}
+		{#if showFuture}
+			{#each adminPeriods as period}
+				<button
+					class="rounded-lg px-4 py-2 text-sm font-medium transition-colors
+                       {selectedPeriod === period
+						? 'bg-gray-900 text-white'
+						: 'text-gray-600 hover:bg-gray-100'}"
+					onclick={() => {
+						selectedPeriod = period;
+					}}
+				>
+					All (up to now)
+				</button>
+			{/each}
+		{/if}
 	</div>
 </div>
