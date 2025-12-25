@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import PriceChart from '$lib/components/PriceChart.svelte';
 	import {
 		createPriceQuery,
 		createAddPriceMutation,
@@ -267,31 +268,6 @@
 					</div>
 
 					<!-- Quick presets -->
-					<!-- <div class="flex flex-wrap gap-2">
-					<button
-						type="button"
-						onclick={setToNow}
-						class="rounded-md bg-gray-100 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-200"
-					>
-						Nu
-					</button>
-					<button
-						type="button"
-						onclick={addOneHour}
-						class="rounded-md bg-gray-100 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-200"
-					>
-						+1 uur
-					</button>
-					<button
-						type="button"
-						onclick={addOneDay}
-						class="rounded-md bg-gray-100 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-200"
-					>
-						+1 dag
-					</button>
-				</div> -->
-
-					<!-- Quick presets -->
 					<div class="space-y-4">
 						<!-- Time presets -->
 						<div>
@@ -468,6 +444,9 @@
 					</p>
 				{/if}
 			</div>
+
+			<!-- Chart -->
+			<PriceChart />
 
 			<!-- Price history -->
 			<div class="rounded-xl bg-white p-6 shadow-sm">

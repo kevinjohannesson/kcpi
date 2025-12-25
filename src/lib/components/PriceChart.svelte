@@ -5,12 +5,102 @@
 	import { BarChart, LineChart } from 'echarts/charts';
 	import { GridComponent, TitleComponent, TooltipComponent } from 'echarts/components';
 	import { CanvasRenderer } from 'echarts/renderers';
-	import { priceDataState } from '$lib/utils/price-data.svelte.js';
+	import { createPriceQuery } from '$lib/queries/prices';
+	import { SvelteDate } from 'svelte/reactivity';
 
 	// Tree-shaking setup
 	use([BarChart, LineChart, GridComponent, CanvasRenderer, TitleComponent, TooltipComponent]);
 
-	const periods = ['LIVE', '1D', '1W', '1M', 'ALL'];
+	type Period = 'LIVE' | '1D' | '1W' | '1M' | 'ALL';
+	type PriceDataPoint = {
+		timestamp: number;
+		date: Date;
+		price: number;
+	};
+
+	const periods: Period[] = ['LIVE', '1D', '1W', '1M', 'ALL'];
+	const priceQuery = createPriceQuery();
+	let selectedPeriod: Period = $state('ALL');
+
+	// Transform Supabase data to the expected format
+	const allPriceData = $derived.by((): PriceDataPoint[] => {
+		if (!priceQuery.data) return [];
+
+		return priceQuery.data.map((item: any) => {
+			const date = new Date(item.price_date);
+			return {
+				timestamp: date.getTime(),
+				date: date,
+				price: item.price
+			};
+		});
+	});
+
+	// Filtered data based on selected period
+	const filteredPriceData = $derived.by((): PriceDataPoint[] => {
+		if (allPriceData.length === 0) return [];
+
+		const now = new SvelteDate();
+
+		switch (selectedPeriod) {
+			case 'LIVE': {
+				// Last 60 minutes - show most recent data points
+				const oneHourAgo = new SvelteDate(now.getTime() - 60 * 60 * 1000);
+				return allPriceData.filter((d) => d.date >= oneHourAgo);
+			}
+
+			case '1D': {
+				// Last 24 hours
+				const oneDayAgo = new SvelteDate(now.getTime() - 24 * 60 * 60 * 1000);
+				return allPriceData.filter((d) => d.date >= oneDayAgo);
+			}
+
+			case '1W': {
+				// Last 7 days
+				const oneWeekAgo = new SvelteDate(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+				return allPriceData.filter((d) => d.date >= oneWeekAgo);
+			}
+
+			case '1M': {
+				// Last 30 days
+				const oneMonthAgo = new SvelteDate(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+				return allPriceData.filter((d) => d.date >= oneMonthAgo);
+			}
+
+			case 'ALL':
+			default:
+				return allPriceData;
+		}
+	});
+
+	// Chart-ready data (formatted for ECharts)
+	const chartData = $derived.by(() => {
+		return {
+			xAxis: filteredPriceData.map((d) => d.timestamp),
+			yAxis: filteredPriceData.map((d) => d.price),
+			series: filteredPriceData.map((d) => [d.timestamp, d.price])
+		};
+	});
+
+	// Computed stats for display
+	const priceStats = $derived.by(() => {
+		if (filteredPriceData.length === 0) {
+			return { min: 0, max: 0, start: 0, end: 0, change: 0, changePercent: 0 };
+		}
+
+		const prices = filteredPriceData.map((d) => d.price);
+		const start = prices[0];
+		const end = prices[prices.length - 1];
+
+		return {
+			min: Math.min(...prices),
+			max: Math.max(...prices),
+			start,
+			end,
+			change: end - start,
+			changePercent: ((end - start) / start) * 100
+		};
+	});
 
 	let options: EChartsOption = $derived({
 		grid: {
@@ -28,7 +118,7 @@
 				fontSize: 11,
 				formatter: (value) => {
 					const date = new Date(value);
-					if (priceDataState.selectedPeriod === 'LIVE' || priceDataState.selectedPeriod === '1D') {
+					if (selectedPeriod === 'LIVE' || selectedPeriod === '1D') {
 						return date.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
 					}
 					return date.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' });
@@ -44,7 +134,7 @@
 		series: [
 			{
 				type: 'line',
-				data: priceDataState.chartData.series,
+				data: chartData.series,
 				smooth: 0.4,
 				symbol: 'none',
 				lineStyle: {
@@ -76,7 +166,7 @@
 					const [ts, price] = params[0].data as [number, number];
 					const date = new Date(ts);
 					const fmt =
-						priceDataState.selectedPeriod === 'LIVE' || priceDataState.selectedPeriod === '1D'
+						selectedPeriod === 'LIVE' || selectedPeriod === '1D'
 							? date.toLocaleString('nl-NL', {
 									day: 'numeric',
 									month: 'short',
@@ -105,22 +195,34 @@
 <div class="mb-4 rounded-2xl bg-white p-4 shadow-sm md:p-6">
 	<!-- Stats Display: Start value, percentage change, end value -->
 	<div class="mb-2 flex justify-between text-sm">
-		<span class="text-gray-500">€ {fmt(priceDataState.priceStats.start)}</span>
-		<span
-			class="font-medium {priceDataState.priceStats.change >= 0
-				? 'text-green-600'
-				: 'text-red-600'}"
-		>
-			{priceDataState.priceStats.change >= 0 ? '+' : ''}{priceDataState.priceStats.changePercent
-				.toFixed(2)
-				.replace('.', ',')}%
-		</span>
-		<span class="font-medium text-gray-900">€ {fmt(priceDataState.priceStats.end)}</span>
+		{#if priceQuery.isLoading}
+			<span class="text-gray-500">Laden...</span>
+		{:else if priceQuery.isError}
+			<span class="text-red-500">Fout bij laden</span>
+		{:else if filteredPriceData.length === 0}
+			<span class="text-gray-500">Geen data</span>
+		{:else}
+			<span class="text-gray-500">€ {fmt(priceStats.start)}</span>
+			<span class="font-medium {priceStats.change >= 0 ? 'text-green-600' : 'text-red-600'}">
+				{priceStats.change >= 0 ? '+' : ''}{priceStats.changePercent.toFixed(2).replace('.', ',')}%
+			</span>
+			<span class="font-medium text-gray-900">€ {fmt(priceStats.end)}</span>
+		{/if}
 	</div>
 
 	<!-- Chart -->
 	<div class="h-48 md:h-72">
-		<Chart {init} {options} />
+		{#if priceQuery.isLoading}
+			<div class="flex h-full items-center justify-center text-gray-500">Laden...</div>
+		{:else if priceQuery.isError}
+			<div class="flex h-full items-center justify-center text-red-500">
+				Fout bij laden van data
+			</div>
+		{:else if filteredPriceData.length === 0}
+			<div class="flex h-full items-center justify-center text-gray-500">Geen data beschikbaar</div>
+		{:else}
+			<Chart {init} {options} />
+		{/if}
 	</div>
 
 	<!-- Period buttons -->
@@ -128,11 +230,11 @@
 		{#each periods as period}
 			<button
 				class="rounded-lg px-4 py-2 text-sm font-medium transition-colors
-                   {priceDataState.selectedPeriod === period
+                   {selectedPeriod === period
 					? 'bg-gray-900 text-white'
 					: 'text-gray-600 hover:bg-gray-100'}"
 				onclick={() => {
-					priceDataState.selectedPeriod = period;
+					selectedPeriod = period;
 					console.log('period', period);
 				}}
 			>
