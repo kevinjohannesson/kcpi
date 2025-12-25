@@ -22,6 +22,7 @@
 	// Wallet state
 	let walletInput = $state('');
 	let walletInputMode: 'kry' | 'eur' = $state('kry'); // Toggle between KCRY and €
+	let hasInitializedWallet = false; // Non-reactive flag to track initialization
 
 	// Message feedback
 	let message = $state('');
@@ -229,20 +230,12 @@
 		return prices[0]?.price ?? 0;
 	});
 
-	// Sync input when wallet data loads or mode changes
+	// Initialize wallet input when data first loads (only once)
+	let hasInitialized = false;
 	$effect(() => {
-		if (walletQuery.data) {
-			if (walletInputMode === 'kry') {
-				if (!walletInput || walletInput === '0') {
-					walletInput = walletQuery.data.kcry_balance.toString();
-				}
-			} else {
-				// € mode - calculate wallet value
-				const walletValue = currentBalance * latestPrice;
-				if (!walletInput || walletInput === '0') {
-					walletInput = walletValue.toFixed(2);
-				}
-			}
+		if (walletQuery.data && !hasInitialized) {
+			walletInput = walletQuery.data.kcry_balance.toString();
+			hasInitialized = true;
 		}
 	});
 
