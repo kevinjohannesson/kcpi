@@ -122,8 +122,8 @@
 	// Random range settings
 	let randomMinMinutes = $state(5);
 	let randomMaxMinutes = $state(30);
-	let randomMinPriceChange = $state(-2);
-	let randomMaxPriceChange = $state(5);
+	let randomMinPriceChange = $state(-0.5);
+	let randomMaxPriceChange = $state(1);
 	let randomMinPrice = $state(16);
 	let randomMaxPrice = $state(120);
 
@@ -265,7 +265,7 @@
 								step="0.01"
 								min="0"
 								bind:value={newPrice}
-								placeholder="104.00"
+								placeholder="1.23"
 								class="w-full rounded-lg border border-gray-300 py-3 pr-4 pl-8 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
 								disabled={addPrice.isPending}
 							/>
@@ -376,10 +376,17 @@
 								</button>
 								<button
 									type="button"
+									onclick={() => adjustPrice(0.1)}
+									class="rounded-md bg-green-50 px-3 py-1.5 text-sm text-green-700 hover:bg-green-100"
+								>
+									+10ct
+								</button>
+								<button
+									type="button"
 									onclick={() => adjustPrice(0.5)}
 									class="rounded-md bg-green-50 px-3 py-1.5 text-sm text-green-700 hover:bg-green-100"
 								>
-									+€0,50
+									+50ct
 								</button>
 								<button
 									type="button"
@@ -387,13 +394,6 @@
 									class="rounded-md bg-green-50 px-3 py-1.5 text-sm text-green-700 hover:bg-green-100"
 								>
 									+€1
-								</button>
-								<button
-									type="button"
-									onclick={() => adjustPrice(5)}
-									class="rounded-md bg-green-50 px-3 py-1.5 text-sm text-green-700 hover:bg-green-100"
-								>
-									+€5
 								</button>
 								<button
 									type="button"
@@ -406,14 +406,14 @@
 									<input
 										type="number"
 										bind:value={randomMinPriceChange}
-										step="0.5"
+										step="0.1"
 										class="w-14 rounded border border-gray-300 px-1.5 py-1 text-center text-xs"
 									/>
 									<span>-</span>
 									<input
 										type="number"
 										bind:value={randomMaxPriceChange}
-										step="0.5"
+										step="0.1"
 										class="w-14 rounded border border-gray-300 px-1.5 py-1 text-center text-xs"
 									/>
 									<span>€</span>
@@ -586,7 +586,7 @@
 			</div>
 
 			<!-- Chart -->
-			<PriceChart />
+			<PriceChart showFuture={true} />
 
 			<!-- Price history -->
 			<div class="rounded-xl bg-white p-6 shadow-sm">

@@ -8,7 +8,7 @@ export const createPriceQuery = () =>
 			const { data, error } = await supabase
 				.from('price_history')
 				.select('*')
-				.order('created_at', { ascending: true });
+				.order('price_date', { ascending: true });
 
 			if (error) throw error;
 			return data;

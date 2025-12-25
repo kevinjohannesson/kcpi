@@ -18,6 +18,8 @@
 		price: number;
 	};
 
+	let { showFuture = false } = $props<{ showFuture?: boolean }>();
+
 	const periods: Period[] = ['LIVE', '1D', '1W', '1M', 'ALL'];
 	const priceQuery = createPriceQuery();
 	let selectedPeriod: Period = $state('ALL');
@@ -26,14 +28,18 @@
 	const allPriceData = $derived.by((): PriceDataPoint[] => {
 		if (!priceQuery.data) return [];
 
-		return priceQuery.data.map((item: any) => {
-			const date = new Date(item.price_date);
-			return {
-				timestamp: date.getTime(),
-				date: date,
-				price: item.price
-			};
-		});
+		const now = new Date();
+
+		return priceQuery.data
+			.map((item: any) => {
+				const date = new Date(item.price_date);
+				return {
+					timestamp: date.getTime(),
+					date: date,
+					price: item.price
+				};
+			})
+			.filter((d: PriceDataPoint) => showFuture || d.date <= now); // Filter out future dates unless showFuture is true
 	});
 
 	// Filtered data based on selected period
@@ -128,8 +134,24 @@
 		},
 		yAxis: {
 			type: 'value',
-			show: false,
-			scale: true
+			show: true,
+			scale: true,
+			axisLine: { show: false },
+			axisTick: { show: false },
+			axisLabel: {
+				color: '#9ca3af',
+				fontSize: 11,
+				formatter: (value: number) => {
+					return `€${value.toFixed(2).replace('.', ',')}`;
+				}
+			},
+			splitLine: {
+				show: true,
+				lineStyle: {
+					color: '#f3f4f6',
+					type: 'dashed'
+				}
+			}
 		},
 		series: [
 			{
