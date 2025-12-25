@@ -1,104 +1,39 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { priceDataState } from '$lib/utils/price-data.svelte.js';
+	import {
+		createPriceQuery,
+		createAddPriceMutation,
+		createDeletePriceMutation
+	} from '$lib/queries/prices';
 
-	import { createQuery, useQueryClient, createMutation } from '@tanstack/svelte-query';
-	import { supabase } from '$lib/utils/supabase';
-
-	type Repo = {
-		full_name: string;
-		description: string;
-		subscribers_count: number;
-		stargazers_count: number;
-		forks_count: number;
-	};
-
-	// const query = createQuery(() => ({
-	// 	queryKey: ['price-data'],
-	// 	queryFn: async () =>
-	// 		await fetch('https://api.github.com/repos/TanStack/query').then((r) => {
-	// 			return r.json();
-	// 		})
-	// }));
-	const query = createQuery(() => ({
-		queryKey: ['price-data'],
-		queryFn: async () => {
-			const { data, error } = await supabase
-				.from('price_history')
-				.select('*')
-				.order('created_at', { ascending: true });
-
-			if (error) throw error;
-			return data;
-		}
-	}));
-
-	export const createAddPriceMutation = () => {
-		const queryClient = useQueryClient();
-
-		return createMutation(() => ({
-			mutationFn: async (price: number) => {
-				const { data, error } = await supabase
-					.from('price_history')
-					.insert({ price })
-					.select()
-					.single();
-
-				if (error) throw error;
-				return data;
-			},
-			onSuccess: () => {
-				queryClient.invalidateQueries({ queryKey: ['price-data'] });
-			}
-		}));
-	};
-
+	const priceQuery = createPriceQuery();
 	const addPrice = createAddPriceMutation();
+	const deletePrice = createDeletePriceMutation();
 
-	let newPrice = '';
-	let submitting = false;
-	let message = '';
+	// Form state
+	let newPrice = $state('');
+	let dateValue = $state(formatDateForInput(new Date()));
+	let timeValue = $state(formatTimeForInput(new Date()));
 
-	onMount(() => {
-		// fetchPriceHistory();
-	});
+	// Message feedback
+	let message = $state('');
+	let messageTimeout: ReturnType<typeof setTimeout>;
 
-	async function handleSubmit(event: Event) {
-		event.preventDefault();
-
-		if (!newPrice || isNaN(parseFloat(newPrice))) {
-			message = '❌ Voer een geldig bedrag in';
-			return;
-		}
-
-		submitting = true;
-		message = '';
-
-		console.log('sumitting');
-		await addPrice.mutateAsync(parseFloat(newPrice));
-		// try {
-		//   await addPrice(newPrice);
-		//   message = `✅ Prijs € ${parseFloat(newPrice).toFixed(2)} toegevoegd!`;
-		//   newPrice = '';
-		// } catch (err) {
-		//   message = `❌ Error: ${err.message}`;
-		// }
-
-		submitting = false;
+	function showMessage(msg: string) {
+		message = msg;
+		clearTimeout(messageTimeout);
+		messageTimeout = setTimeout(() => (message = ''), 3000);
 	}
 
-	async function handleDelete(id: string) {
-		if (!confirm('Weet je zeker dat je deze prijs wilt verwijderen?')) return;
-
-		// try {
-		//   await priceDataState.deletePrice(id);
-		//   message = '✅ Verwijderd';
-		// } catch (err) {
-		//   message = `❌ Error: ${err.message}`;
-		// }
+	// Format helpers for native inputs
+	function formatDateForInput(date: Date): string {
+		return date.toISOString().split('T')[0];
 	}
 
-	function formatDate(dateStr: string) {
+	function formatTimeForInput(date: Date): string {
+		return date.toTimeString().slice(0, 5);
+	}
+
+	function formatDisplayDate(dateStr: string): string {
 		return new Date(dateStr).toLocaleString('nl-NL', {
 			day: 'numeric',
 			month: 'short',
@@ -106,6 +41,82 @@
 			hour: '2-digit',
 			minute: '2-digit'
 		});
+	}
+
+	// Combine date + time inputs into a Date object
+	function getSelectedDateTime(): Date {
+		const [year, month, day] = dateValue.split('-').map(Number);
+		const [hours, minutes] = timeValue.split(':').map(Number);
+		return new Date(year, month - 1, day, hours, minutes);
+	}
+
+	// Quick time presets
+	function setToNow() {
+		const now = new Date();
+		dateValue = formatDateForInput(now);
+		timeValue = formatTimeForInput(now);
+	}
+
+	function addOneDay() {
+		const current = getSelectedDateTime();
+		current.setDate(current.getDate() + 1);
+		dateValue = formatDateForInput(current);
+		timeValue = formatTimeForInput(current);
+	}
+
+	function addOneHour() {
+		const current = getSelectedDateTime();
+		current.setHours(current.getHours() + 1);
+		dateValue = formatDateForInput(current);
+		timeValue = formatTimeForInput(current);
+	}
+
+	async function handleSubmit(e: Event) {
+		e.preventDefault();
+
+		const price = parseFloat(newPrice);
+		if (isNaN(price) || price < 0) {
+			showMessage('❌ Voer een geldig bedrag in');
+			return;
+		}
+
+		const priceDate = getSelectedDateTime();
+
+		try {
+			await addPrice.mutateAsync({ price, priceDate });
+			showMessage(`✅ Prijs € ${price.toFixed(2)} toegevoegd!`);
+			// newPrice = '';
+			// addOneDay();
+		} catch (err) {
+			showMessage(`❌ Error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+		}
+	}
+
+	async function handleDelete(id: number) {
+		if (!confirm('Weet je zeker dat je deze prijs wilt verwijderen?')) return;
+
+		try {
+			await deletePrice.mutateAsync(id);
+			showMessage('✅ Verwijderd');
+		} catch (err) {
+			showMessage(`❌ Error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+		}
+	}
+
+	// Sort prices by date descending for display (newest first)
+	const sortedPrices = $derived(
+		[...(priceQuery.data ?? [])].sort(
+			(a, b) => new Date(b.price_date).getTime() - new Date(a.price_date).getTime()
+		)
+	);
+
+	// Count future prices
+	const futurePricesCount = $derived(
+		sortedPrices.filter((p) => new Date(p.price_date) > new Date()).length
+	);
+
+	function isFuture(dateStr: string): boolean {
+		return new Date(dateStr) > new Date();
 	}
 </script>
 
@@ -122,27 +133,81 @@
 		<div class="mb-6 rounded-xl bg-white p-6 shadow-sm">
 			<h2 class="mb-4 font-semibold text-gray-900">Nieuwe prijs toevoegen</h2>
 
-			<form onsubmit={handleSubmit} class="flex gap-3">
-				<div class="flex-1">
+			<form onsubmit={handleSubmit} class="space-y-4">
+				<!-- Price input -->
+				<div>
+					<label for="price" class="mb-1 block text-sm font-medium text-gray-700">Prijs</label>
 					<div class="relative">
 						<span class="absolute top-1/2 left-3 -translate-y-1/2 text-gray-500">€</span>
 						<input
+							id="price"
 							type="number"
 							step="0.01"
 							min="0"
 							bind:value={newPrice}
 							placeholder="104.00"
 							class="w-full rounded-lg border border-gray-300 py-3 pr-4 pl-8 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-							disabled={submitting}
+							disabled={addPrice.isPending}
 						/>
 					</div>
 				</div>
+
+				<!-- Date/Time inputs -->
+				<div class="grid grid-cols-2 gap-3">
+					<div>
+						<label for="date" class="mb-1 block text-sm font-medium text-gray-700">Datum</label>
+						<input
+							id="date"
+							type="date"
+							bind:value={dateValue}
+							class="w-full rounded-lg border border-gray-300 px-3 py-3 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+							disabled={addPrice.isPending}
+						/>
+					</div>
+					<div>
+						<label for="time" class="mb-1 block text-sm font-medium text-gray-700">Tijd</label>
+						<input
+							id="time"
+							type="time"
+							bind:value={timeValue}
+							class="w-full rounded-lg border border-gray-300 px-3 py-3 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+							disabled={addPrice.isPending}
+						/>
+					</div>
+				</div>
+
+				<!-- Quick presets -->
+				<div class="flex flex-wrap gap-2">
+					<button
+						type="button"
+						onclick={setToNow}
+						class="rounded-md bg-gray-100 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-200"
+					>
+						Nu
+					</button>
+					<button
+						type="button"
+						onclick={addOneHour}
+						class="rounded-md bg-gray-100 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-200"
+					>
+						+1 uur
+					</button>
+					<button
+						type="button"
+						onclick={addOneDay}
+						class="rounded-md bg-gray-100 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-200"
+					>
+						+1 dag
+					</button>
+				</div>
+
+				<!-- Submit -->
 				<button
 					type="submit"
-					disabled={submitting}
-					class="rounded-lg bg-blue-600 px-6 py-3 font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+					disabled={addPrice.isPending}
+					class="w-full rounded-lg bg-blue-600 px-6 py-3 font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
 				>
-					{submitting ? 'Bezig...' : 'Toevoegen'}
+					{addPrice.isPending ? 'Bezig...' : 'Toevoegen'}
 				</button>
 			</form>
 
@@ -157,53 +222,59 @@
 		<div class="rounded-xl bg-white p-6 shadow-sm">
 			<h2 class="mb-4 font-semibold text-gray-900">Prijsgeschiedenis</h2>
 
-			{#if query.isPending}
+			{#if priceQuery.isPending}
 				<p class="text-gray-500">Laden...</p>
-			{/if}
-			{#if query.error}
-				<p class="text-red-500">Error: {query.error.message}</p>
-			{/if}
-			{#if query.isSuccess}
-				{JSON.stringify(query.data)}
-				{#if priceDataState.allPriceData.length === 0}
-					<p class="text-gray-500">Nog geen prijzen toegevoegd</p>
-				{:else}
-					<div class="overflow-x-auto">
-						<table class="w-full">
-							<thead>
-								<tr class="border-b border-gray-200">
-									<th class="px-2 py-3 text-left text-sm font-medium text-gray-500">Datum</th>
-									<th class="px-2 py-3 text-right text-sm font-medium text-gray-500">Prijs</th>
-									<th class="px-2 py-3 text-right text-sm font-medium text-gray-500">Actie</th>
+			{:else if priceQuery.isError}
+				<p class="text-red-500">Error: {priceQuery.error?.message}</p>
+			{:else if sortedPrices.length === 0}
+				<p class="text-gray-500">Nog geen prijzen toegevoegd</p>
+			{:else}
+				<div class="overflow-x-auto">
+					<table class="w-full">
+						<thead>
+							<tr class="border-b border-gray-200">
+								<th class="px-2 py-3 text-left text-sm font-medium text-gray-500">Datum</th>
+								<th class="px-2 py-3 text-right text-sm font-medium text-gray-500">Prijs</th>
+								<th class="px-2 py-3 text-right text-sm font-medium text-gray-500">Actie</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each sortedPrices as item (item.id)}
+								<tr class="border-b border-gray-100 hover:bg-gray-50">
+									<td class="px-2 py-3 text-sm text-gray-600">
+										<span class="flex items-center gap-2">
+											{formatDisplayDate(item.price_date)}
+											{#if isFuture(item.price_date)}
+												<span class="rounded bg-purple-100 px-1.5 py-0.5 text-xs text-purple-700">
+													Gepland
+												</span>
+											{/if}
+										</span>
+									</td>
+									<td class="px-2 py-3 text-right font-mono text-sm font-medium text-gray-900">
+										€ {parseFloat(String(item.price)).toFixed(2).replace('.', ',')}
+									</td>
+									<td class="px-2 py-3 text-right">
+										<button
+											onclick={() => handleDelete(item.id)}
+											disabled={deletePrice.isPending}
+											class="text-sm text-red-600 hover:text-red-800 disabled:opacity-50"
+										>
+											Verwijder
+										</button>
+									</td>
 								</tr>
-							</thead>
-							<tbody>
-								{#each [...priceDataState.allPriceData].reverse() as item}
-									<tr class="border-b border-gray-100 hover:bg-gray-50">
-										<td class="px-2 py-3 text-sm text-gray-600">
-											{formatDate(item.date.toISOString())}
-										</td>
-										<td class="px-2 py-3 text-right font-mono text-sm font-medium text-gray-900">
-											€ {item.price.toFixed(2).replace('.', ',')}
-										</td>
-										<td class="px-2 py-3 text-right">
-											<button
-												onclick={() => handleDelete('foobar')}
-												class="text-sm text-red-600 hover:text-red-800"
-											>
-												Verwijder
-											</button>
-										</td>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
-					</div>
+							{/each}
+						</tbody>
+					</table>
+				</div>
 
-					<p class="mt-4 text-sm text-gray-500">
-						{priceDataState.allPriceData.length} prijzen totaal
-					</p>
-				{/if}
+				<p class="mt-4 text-sm text-gray-500">
+					{sortedPrices.length} prijzen totaal
+					{#if futurePricesCount > 0}
+						· {futurePricesCount} gepland
+					{/if}
+				</p>
 			{/if}
 		</div>
 	</div>
